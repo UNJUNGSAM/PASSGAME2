@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>스피드 단어 게임</title>
+    <script src="https://hammerjs.github.io/dist/hammer.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #category-select {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .category-btn {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #3498db;
+            color: white;
+        }
+
+        #game-container {
+            display: none;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        #timer {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        #score {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 40px 20px;
+            margin: 20px auto;
+            width: 80%;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            font-size: 48px;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .buttons {
+            margin-top: 10px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 40%;
+        }
+
+        #pass-btn {
+            background-color: #ff4444;
+            color: white;
+        }
+
+        #correct-btn {
+            background-color: #00C851;
+            color: white;
+        }
+
+        @media (max-width: 480px) {
+            #timer {
+                font-size: 20px;
+            }
+
+            #score {
+                font-size: 20px;
+            }
+
+            .card {
+                font-size: 36px;
+                padding: 30px 15px;
+            }
+
+            button {
+                font-size: 16px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="category-select">
+        <button class="category-btn" data-category="동물">🐾 동물</button>
+        <button class="category-btn" data-category="과일">🍎 과일</button>
+        <button class="category-btn" data-category="직업">💼 직업</button>
+        <button class="category-btn" data-category="나라">🌍 나라</button>
+        <button class="category-btn" data-category="스포츠">⚽ 스포츠</button>
+    </div>
+
+    <div id="game-container">
+        <div id="timer">시간: <span id="time-left">60</span>초</div>
+        <div id="score">점수: <span id="score-value">0</span></div>
+        <div id="card" class="card"></div>
+        <div class="buttons">
+            <button id="pass-btn">패스 (↑)</button>
+            <button id="correct-btn">정답 (↓)</button>
+        </div>
+    </div>
+
+    <audio id="correctSound" src="correct.mp3" preload="auto"></audio>
+    <audio id="passSound" src="pass.mp3" preload="auto"></audio>
+    <audio id="endSound" src="end.mp3" preload="auto"></audio>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const words = {
+                "동물": ["강아지", "고양이", "사자", "코끼리", "기린", "토끼", "호랑이", "곰", "팬더", "펭귄"],
+                "과일": ["사과", "바나나", "포도", "딸기", "수박", "오렌지", "복숭아", "키위", "망고", "파인애플"],
+                "직업": ["선생님", "의사", "경찰관", "소방관", "요리사", "과학자", "가수", "배우", "운동선수", "화가"],
+                "나라": ["한국", "미국", "일본", "중국", "프랑스", "영국", "독일", "캐나다", "호주", "브라질"],
+                "스포츠": ["축구", "야구", "농구", "배구", "테니스", "수영", "달리기", "태권도", "골프", "스키"]
+            };
+
+            let currentWords = [];
+            let currentIndex = 0;
+            let score = 0;
+            let timeLeft = 60;
+            let timerId = null;
+            let correctSound = document.getElementById('correctSound');
+            let passSound = document.getElementById('passSound');
+            let endSound = document.getElementById('endSound');
+
+            // 카테고리 버튼 클릭 이벤트 리스너
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.addEventListener('click', (event) => {
+                    event.preventDefault(); // preventDefault 추가
+                    const category = btn.dataset.category;
+                    startGame(category);
+                });
+            });
+
+            function startGame(category) {
+                document.getElementById('category-select').style.display = 'none';
+                document.getElementById('game-container').style.display = 'flex';
+                
+                currentWords = shuffle([...words[category]]);
+                currentIndex = 0;
+                score = 0;
+                timeLeft = 60;
+                
+                updateScore();
+                showNextWord();
+                startTimer();
+                
+                // 스와이프 이벤트 설정 (Hammer.js 대신 터치 이벤트 사용)
+                const card = document.getElementById('card');
+                card.addEventListener('touchstart', handleTouchStart, false);
+                card.addEventListener('touchmove', handleTouchMove, false);
+                card.addEventListener('touchend', handleTouchEnd, false);
+
+                let xDown = null;
+                let yDown = null;
+
+                function handleTouchStart(evt) {
+                    xDown = evt.touches[0].clientX;
+                    yDown = evt.touches[0].clientY;
+                }
+
+                function handleTouchMove(evt) {
+                    if (!xDown || !yDown) {
+                        return;
+                    }
+
+                    let xUp = evt.touches[0].clientX;
+                    let yUp = evt.touches[0].clientY;
+
+                    let xDiff = xDown - xUp;
+                    let yDiff = yDown - yUp;
+
+                    if (Math.abs(xDiff) + Math.abs(yDiff) > 10) { // 민감도 조절
+                        if (Math.abs(xDiff) > Math.abs(yDiff)) {
+                            // Horizontal swipe (필요한 경우)
+                        } else {
+                            if (yDiff > 0) {
+                                // Swipe up
+                                handlePass();
+                            } else {
+                                // Swipe down
+                                handleCorrect();
+                            }
+                        }
+                        xDown = null;
+                        yDown = null;
+                    }
+                }
+
+                function handleTouchEnd(evt) {
+                    // 터치 종료 시 처리 (필요한 경우)
+                }
+            }
+
+            function shuffle(array) {
+                return array.sort(() => Math.random() - 0.5);
+            }
+
+            function showNextWord() {
+                const card = document.getElementById('card');
+                if(currentIndex < currentWords.length) {
+                    card.textContent = currentWords[currentIndex];
+                } else {
+                    endGame();
+                }
+            }
+
+            function handleCorrect() {
+                console.log("Correct!");
+                score += 10;
+                currentIndex++;
+                updateScore();
+                showNextWord();
+                correctSound.play();
+            }
+
+            function handlePass() {
+                console.log("Pass!");
+                currentIndex++;
+                showNextWord();
+                passSound.play();
+            }
+
+            function updateScore() {
+                document.getElementById('score-value').textContent = score;
+            }
+
+            function startTimer() {
+                document.getElementById('time-left').textContent = timeLeft;
+                timerId = setInterval(() => {
+                    timeLeft--;
+                    document.getElementById('time-left').textContent = timeLeft;
+                    if(timeLeft <= 0) endGame();
+                }, 1000);
+            }
+
+            function endGame() {
+                clearInterval(timerId);
+                endSound.play();
+                setTimeout(() => {
+                    alert(`게임 종료! 최종 점수: ${score}점`);
+                    location.reload();
+                }, 1000);
+            }
+
+            // 버튼 이벤트 리스너
+            document.getElementById('correct-btn').addEventListener('click', handleCorrect);
+            document.getElementById('pass-btn').addEventListener('click', handlePass);
+        });
+    </script>
+</body>
+</html>
